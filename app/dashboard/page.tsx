@@ -67,12 +67,13 @@ export default function DashboardPage() {
         limit: String(PAGE_SIZE),
       });
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
+      if (searchQuery.trim()) params.set('search', searchQuery.trim());
 
       const response = await authenticatedFetch(`/api/circles?${params}`);
       if (response.ok) {
         const data = await response.json();
         setCircles(data.data || []);
-        setTotalPages(data.pagination?.totalPages ?? 1);
+        setTotalPages(data.meta?.pages ?? 1);
       } else if (response.status === 401) {
         router.push('/auth/login');
       }
@@ -81,11 +82,17 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, statusFilter, router]);
+  }, [currentPage, statusFilter, searchQuery, router]);
+
+  // Debounce search: reset page then re-fetch after 300ms idle
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   useEffect(() => {
-    fetchCircles();
-  }, [fetchCircles]);
+    const timer = setTimeout(fetchCircles, searchQuery ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [fetchCircles, searchQuery]);
 
   // Reset to page 1 when filter changes
   const handleStatusChange = (value: string) => {
@@ -93,15 +100,7 @@ export default function DashboardPage() {
     setCurrentPage(1);
   };
 
-  // Client-side search filter (within the current page)
-  const filteredCircles = circles.filter((circle) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      circle.name.toLowerCase().includes(q) ||
-      circle.description?.toLowerCase().includes(q)
-    );
-  });
+  const filteredCircles = circles;
 
   // Build visible page numbers with ellipsis
   const getPageNumbers = () => {
