@@ -13,3 +13,8 @@ node_modules/
 target/
 **/*.rs.bk
 Cargo.lock
+
+.agents/
+.claude/
+issue.md
+skills-lock.json
