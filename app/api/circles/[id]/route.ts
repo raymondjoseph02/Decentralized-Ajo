@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
+import { checkRateLimit, globalRateLimiter } from '@/lib/rate-limit';
 
 // GET - Get circle details
 export async function GET(
@@ -8,6 +9,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Check rate limit
+    const rateLimitResponse = await checkRateLimit(globalRateLimiter, request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const authHeader = request.headers.get('authorization');
     const token = extractToken(authHeader);
 
@@ -116,6 +121,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Check rate limit
+    const rateLimitResponse = await checkRateLimit(globalRateLimiter, request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const authHeader = request.headers.get('authorization');
     const token = extractToken(authHeader);
 

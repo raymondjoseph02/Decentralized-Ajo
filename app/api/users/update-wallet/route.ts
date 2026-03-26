@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
 import { isValidStellarAddress } from '@/lib/stellar-config';
+import { checkRateLimit, globalRateLimiter } from '@/lib/rate-limit';
 
 export async function PATCH(request: NextRequest) {
   try {
+    // Check rate limit
+    const rateLimitResponse = await checkRateLimit(globalRateLimiter, request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const authHeader = request.headers.get('authorization');
     const token = extractToken(authHeader);
 

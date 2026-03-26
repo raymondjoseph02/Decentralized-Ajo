@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken, extractToken } from '@/lib/auth';
+import { checkRateLimit, globalRateLimiter, circleCreationRateLimiter } from '@/lib/rate-limit';
 
 // POST - Create a new circle
 export async function POST(request: NextRequest) {
   try {
+    // Check rate limit for circle creation
+    const rateLimitResponse = await checkRateLimit(circleCreationRateLimiter, request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const authHeader = request.headers.get('authorization');
     const token = extractToken(authHeader);
 
@@ -91,6 +96,10 @@ export async function POST(request: NextRequest) {
 // GET - List circles
 export async function GET(request: NextRequest) {
   try {
+    // Check global rate limit
+    const rateLimitResponse = await checkRateLimit(globalRateLimiter, request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const authHeader = request.headers.get('authorization');
     const token = extractToken(authHeader);
 
