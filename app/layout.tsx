@@ -2,8 +2,10 @@ import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner'
+import { Toaster as HotToaster } from 'react-hot-toast'
 import { WalletProvider } from '@/lib/wallet-context'
 import { ThemeProvider } from '@/components/theme-provider'
+import { Web3Provider } from '@/providers/Web3Provider'
 import { Navbar } from '@/components/layout/navbar'
 import './globals.css'
 
@@ -49,13 +51,16 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <WalletProvider>
-            <div className="flex flex-col min-h-screen">
-              <Navbar />
-              <main className="flex-1">{children}</main>
-            </div>
-            <Toaster />
-          </WalletProvider>
+          <Web3Provider>
+            <WalletProvider>
+              <div className="flex flex-col min-h-screen">
+                <Navbar />
+                <main className="flex-1">{children}</main>
+              </div>
+              <Toaster />
+              <HotToaster position="bottom-right" />
+            </WalletProvider>
+          </Web3Provider>
         </ThemeProvider>
         <Analytics />
       </body>

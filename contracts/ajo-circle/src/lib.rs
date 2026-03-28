@@ -1,16 +1,5 @@
 //! # Ajo Circle Smart Contract
-//!
-//! A decentralized rotating savings and credit association (ROSCA) implementation on Stellar.
-//! This contract enables groups to pool funds periodically, with members taking turns receiving payouts.
-//!
-//! ## Core Features
-//! - Member management with configurable limits
-//! - Periodic contribution tracking
-//! - Rotating payout system with shuffled order
-//! - Governance via dissolution voting
-//! - Emergency panic mechanism for fund recovery
-//! - KYC status tracking
-//! - Token-agnostic design (supports any Stellar token)
+//! Decentralized ROSCA implementation on Stellar (Soroban)
 
 #![no_std]
 
@@ -19,14 +8,24 @@ pub mod factory;
 #[cfg(test)]
 mod deposit_tests;
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, Map, Vec};
+#[cfg(test)]
+mod withdrawal_tests;
 
-/// Default maximum number of members allowed in a circle
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, Map,
+    Symbol, Vec,
+};
+
 const MAX_MEMBERS: u32 = 50;
-/// Absolute maximum capacity for any circle
 const HARD_CAP: u32 = 100;
 
-/// Error codes returned by contract operations
+// ---------------- ROLE CONSTANTS (Generic AccessControl style) ----------------
+const ADMIN_ROLE: Symbol = symbol_short!("ADMIN");
+const MANAGER_ROLE: Symbol = symbol_short!("MANAGER");
+
+// Legacy alias for backward compatibility
+const ROLE_ADMIN: Symbol = ADMIN_ROLE;
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum AjoError {
@@ -65,9 +64,6 @@ pub enum AjoError {
         Paused = 17,
 }
 
-/// Core circle configuration and state
-///
-/// Stores the fundamental parameters and current state of an Ajo circle.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CircleData {
@@ -89,9 +85,6 @@ pub struct CircleData {
     pub max_members: u32,
 }
 
-/// Individual member data and contribution history
-///
-/// Tracks each member's financial activity within the circle.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemberData {
@@ -149,9 +142,6 @@ pub struct MemberStanding {
     pub is_active: bool,
 }
 
-/// Storage keys for contract data
-///
-/// Defines all persistent storage locations used by the contract.
 #[contracttype]
 pub enum DataKey {
     /// Core circle configuration (CircleData)
@@ -189,10 +179,6 @@ pub enum DataKey {
         Paused,
 }
 
-/// Main Ajo Circle contract
-///
-/// Implements a decentralized rotating savings and credit association (ROSCA).
-/// Members contribute periodically and receive payouts in a predetermined order.
 #[contract]
 pub struct AjoCircle;
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PlusCircle, Search } from 'lucide-react';
 import { authenticatedFetch } from '@/lib/auth-client';
+import { useWallet } from '@/lib/wallet-context';
+import { Dashboard } from '@/components/dashboard';
 import { DashboardStats } from '@/components/dashboard/dashboard-stats';
 import { CircleList } from '@/components/dashboard/circle-list';
 import {
@@ -27,192 +29,333 @@ interface Circle {
   name: string;
   description?: string;
   contributionAmount: number;
+  contributionFrequencyDays: number;
   status: string;
   members: { userId: string }[];
+  contributions?: { amount: number }[];
+}
+
+interface AjoGroup {
+  id: string;
+  name: string;
+  balance: string | number;
+  nextCycle: string;
+  maxRounds: number;
+  currentRound: number;
+  status: string;
+  createdAt: string;
+  members: { userId: string }[];
+  contributions: { amount: number }[];
 }
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { isConnected } = useWallet();
+
   const [circles, setCircles] = useState<Circle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userName, setUserName] = useState('');
+  const [activeGroups, setActiveGroups] = useState<AjoGroup[]>([]);
 
-  // Search and Filtering State
+  // Filter and Sort State
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-
-  // Pagination state
+  const [durationFilter, setDurationFilter] = useState('ALL');
+  const [sortBy, setSortBy] = useState('newest');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      router.push('/auth/login');
-      return;
-    }
-
-    const user = localStorage.getItem('user');
-    if (user) {
-      const userData = JSON.parse(user);
-      setUserName(userData.firstName || userData.email);
-    }
-  }, [router]);
-
   const fetchCircles = useCallback(async () => {
-    setLoading(true);
     try {
+      setLoading(true);
       const params = new URLSearchParams({
-        page: String(currentPage),
-        limit: String(PAGE_SIZE),
+        page: currentPage.toString(),
+        limit: PAGE_SIZE.toString(),
+        status: statusFilter,
+        duration: durationFilter,
+        sortBy,
+        search: searchQuery,
       });
-      if (statusFilter !== 'ALL') params.set('status', statusFilter);
-      if (searchQuery.trim()) params.set('search', searchQuery.trim());
 
-      const response = await authenticatedFetch(`/api/circles?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        setCircles(data.data || []);
-        setTotalPages(data.meta?.pages ?? 1);
-      } else if (response.status === 401) {
-        router.push('/auth/login');
+      const response = await authenticatedFetch(`/api/circles?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch circles');
       }
+
+      const data = await response.json();
+      setCircles(data.data || []);
+      setTotalPages(data.meta?.pages || 1);
+
+      // Filter active circles for dashboard overview
+      const activeCircles = data.data?.filter((circle: Circle) => circle.status === 'ACTIVE') || [];
+      const activeGroupsData: AjoGroup[] = activeCircles.slice(0, 3).map((circle: Circle) => {
+        // Calculate balance from contributions
+        const totalBalance = circle.contributions?.reduce((sum, contrib) => sum + contrib.amount, 0) || 0;
+        // Mock next cycle for now
+        const nextCycle = 'Next payout in 5 days';
+
+        return {
+          id: circle.id,
+          name: circle.name,
+          balance: `${totalBalance.toLocaleString()} XLM`,
+          nextCycle,
+        };
+      });
+      setActiveGroups(activeGroupsData);
     } catch (error) {
       console.error('Error fetching circles:', error);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, statusFilter, searchQuery, router]);
-
-  // Debounce search: reset page then re-fetch after 300ms idle
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
+  }, [currentPage, statusFilter, durationFilter, sortBy, searchQuery]);
 
   useEffect(() => {
-    const timer = setTimeout(fetchCircles, searchQuery ? 300 : 0);
-    return () => clearTimeout(timer);
-  }, [fetchCircles, searchQuery]);
-
-  // Reset to page 1 when filter changes
-  const handleStatusChange = (value: string) => {
-    setStatusFilter(value);
-    setCurrentPage(1);
-  };
-
-  const filteredCircles = circles;
-
-  // Build visible page numbers with ellipsis
-  const getPageNumbers = () => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    const pages: (number | 'ellipsis')[] = [1];
-    if (currentPage > 3) pages.push('ellipsis');
-    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
-      pages.push(i);
+    if (isConnected) {
+      fetchCircles();
+    } else {
+      setLoading(false);
     }
-    if (currentPage < totalPages - 2) pages.push('ellipsis');
-    pages.push(totalPages);
-    return pages;
+  }, [fetchCircles, isConnected]);
+
+  return (
+    <main className="min-h-screen bg-background">
+      {/* Use your new Dashboard component to handle Header + Wallet Check + Overview Cards */}
+      <Dashboard activeGroups={activeGroups} loading={loading} />
+
+      <div className="container mx-auto px-4 py-12">
+        {/* Keeping Main's search and filtering logic below the overview */}
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold">Explore More Circles</h2>
+
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Search circles..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 w-full sm:w-64"
+                />
+              </div>
+
+              <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+                <TabsList>
+                  <TabsTrigger value="ALL">All</TabsTrigger>
+                  <TabsTrigger value="ACTIVE">Active</TabsTrigger>
+                  <TabsTrigger value="COMPLETED">Completed</TabsTrigger>
+                </TabsList>
+              </Tabs>
+  useWallet(); // ensures wallet context is available for child components
+
+  const [circles, setCircles] = useState<Circle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const fetchCircles = useCallback(async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!token) {
+      router.push('/auth/login');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(PAGE_SIZE),
+        ...(search && { search }),
+        ...(statusFilter && { status: statusFilter }),
+      });
+
+      const res = await authenticatedFetch(`/api/circles?${params}`);
+      if (res.status === 401) {
+        router.push('/auth/login');
+        return;
+      }
+      if (!res.ok) throw new Error('Failed to fetch circles');
+
+      const json = await res.json();
+      setCircles(json.data ?? []);
+      setTotalPages(json.meta?.pages ?? 1);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, search, statusFilter, router]);
+
+  useEffect(() => {
+    fetchCircles();
+  }, [fetchCircles]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
+
+  // Map circles to the shape Dashboard expects
+  const activeGroups = circles
+    .filter((c: Circle) => c.status === 'ACTIVE')
+    .map((c: Circle) => ({
+      id: c.id,
+      name: c.name,
+      balance: c.members.length * c.contributionAmount * c.currentRound,
+      nextCycle: (() => {
+        const daysSinceStart =
+          (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+        const daysUntilNext =
+          c.contributionFrequencyDays - (daysSinceStart % c.contributionFrequencyDays);
+        return daysUntilNext <= 1
+          ? 'Tomorrow'
+          : `In ${Math.ceil(daysUntilNext)} days`;
+      })(),
+    }));
+
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+    const pages: (number | 'ellipsis')[] = [];
+    if (totalPages <= 5) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (page > 3) pages.push('ellipsis');
+      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) {
+        pages.push(i);
+      }
+      if (page < totalPages - 2) pages.push('ellipsis');
+      pages.push(totalPages);
+    }
+
+    return (
+      <Pagination>
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              href="#"
+              onClick={(e: React.MouseEvent) => { e.preventDefault(); setPage((p: number) => Math.max(1, p - 1)); }}
+              aria-disabled={page === 1}
+              className={page === 1 ? 'pointer-events-none opacity-50' : ''}
+            />
+          </PaginationItem>
+          {pages.map((p, i) =>
+            p === 'ellipsis' ? (
+              <PaginationItem key={`ellipsis-${i}`}>
+                <PaginationEllipsis />
+              </PaginationItem>
+            ) : (
+              <PaginationItem key={p}>
+                <PaginationLink
+                  href="#"
+                  isActive={p === page}
+                  onClick={(e: React.MouseEvent) => { e.preventDefault(); setPage(p as number); }}
+                >
+                  {p}
+                </PaginationLink>
+              </PaginationItem>
+            )
+          )}
+          <PaginationItem>
+            <PaginationNext
+              href="#"
+              onClick={(e: React.MouseEvent) => { e.preventDefault(); setPage((p: number) => Math.min(totalPages, p + 1)); }}
+              aria-disabled={page === totalPages}
+              className={page === totalPages ? 'pointer-events-none opacity-50' : ''}
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
+    );
   };
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Welcome back, {userName}!</h1>
-              <p className="text-muted-foreground mt-1">Manage your Ajo savings circles</p>
-            </div>
-            <Button asChild>
-              <Link href="/circles/create">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Create Circle
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </header>
+      {/* Overview: wallet gate + active group cards + upcoming cycles */}
+      <Dashboard activeGroups={activeGroups} />
 
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-12">
-        {/* Stats Cards */}
-        <div className="mb-12">
-          <DashboardStats />
-        </div>
+      <div className="container mx-auto px-4 py-10 space-y-8">
+        {/* Stats row */}
+        <DashboardStats />
 
-        {/* Circles List Section */}
-        <div className="space-y-6">
+        {/* Circle browser */}
+        <div className="space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <h2 className="text-2xl font-bold">Your Ajo Circles</h2>
-            
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <div className="relative w-full sm:w-64">
+            <h2 className="text-2xl font-bold">My Circles</h2>
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search circles..."
-                  className="pl-10 bg-card border-border/50 focus:border-primary/50"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={search}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+                  className="pl-9 w-56"
                 />
               </div>
-              
-              <Tabs value={statusFilter} onValueChange={handleStatusChange} className="w-full sm:w-auto">
-                <TabsList className="bg-card border border-border/50">
-                  <TabsTrigger value="ALL">All</TabsTrigger>
+              <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+                <TabsList>
+                  <TabsTrigger value="">All</TabsTrigger>
                   <TabsTrigger value="ACTIVE">Active</TabsTrigger>
                   <TabsTrigger value="PENDING">Pending</TabsTrigger>
-                  <TabsTrigger value="COMPLETED">Done</TabsTrigger>
+                  <TabsTrigger value="COMPLETED">Completed</TabsTrigger>
                 </TabsList>
               </Tabs>
+              <Button asChild>
+                <Link href="/circles/create">
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  New Circle
+                </Link>
+              </Button>
             </div>
           </div>
 
-          <CircleList circles={filteredCircles} loading={loading} />
+          <CircleList circles={circles} loading={loading} />
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); if (currentPage > 1) setCurrentPage((p) => p - 1); }}
-                    aria-disabled={currentPage === 1}
-                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
-                  />
-                </PaginationItem>
+            <div className="flex justify-center">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
 
-                {getPageNumbers().map((page, idx) =>
-                  page === 'ellipsis' ? (
-                    <PaginationItem key={`ellipsis-${idx}`}>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    const page = i + 1;
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(page)}
+                          isActive={currentPage === page}
+                          className="cursor-pointer"
+                        >
+                          {page}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+
+                  {totalPages > 5 && (
+                    <PaginationItem>
                       <PaginationEllipsis />
                     </PaginationItem>
-                  ) : (
-                    <PaginationItem key={page}>
-                      <PaginationLink
-                        href="#"
-                        isActive={page === currentPage}
-                        onClick={(e) => { e.preventDefault(); setCurrentPage(page); }}
-                      >
-                        {page}
-                      </PaginationLink>
-                    </PaginationItem>
-                  )
-                )}
+                  )}
 
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); if (currentPage < totalPages) setCurrentPage((p) => p + 1); }}
-                    aria-disabled={currentPage === totalPages}
-                    className={currentPage === totalPages ? 'pointer-events-none opacity-50' : ''}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
           )}
+          {renderPagination()}
         </div>
       </div>
     </main>
