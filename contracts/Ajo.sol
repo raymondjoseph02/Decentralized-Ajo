@@ -40,11 +40,16 @@ contract Ajo is Pausable, AccessControl {
     error InvalidContribution();
     error AjoIsFull();
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     /**
      * @dev Initializes the Ajo pool with core parameters
-     * @param _contributionAmount The amount required for each contribution
-     * @param _cycleDuration The length of time for one cycle
+     * @param _amount The amount required for each contribution
      * @param _maxMembers The maximum capacity of the pool
+     * @param _admin The administrator of the pool
      */
     constructor(
         uint256 _contributionAmount,
