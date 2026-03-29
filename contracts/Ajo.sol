@@ -78,4 +78,14 @@ contract Ajo {
         maxMembers = _maxMembers;
         currentCycle = 1;
     }
+
+    /// @notice Get all member addresses
+    function getMembers() external view returns (address[] memory) {
+        return members;
+    }
+
+    /// @notice Get member count
+    function memberCount() external view returns (uint256) {
+        return members.length;
+    }
 }

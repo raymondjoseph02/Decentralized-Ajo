@@ -43,6 +43,10 @@ model User {
   withdrawals Withdrawal[]
   refreshTokens RefreshToken[]
   notifications Notification[]
+  
+  // New Ajo Group Relations
+  createdGroups AjoGroup[]  @relation("GroupCreator")
+  memberships   AjoMember[]
   ajos          UserAjo[]
   ajoParticipations UserAjoParticipation[]
   settings      UserSettings?
@@ -87,6 +91,7 @@ model Circle {
   // Blockchain
   contractAddress String?
   contractDeployed Boolean @default(false)
+  onChainId String?
   
   // Metadata
   expectedEndDate DateTime?
@@ -131,7 +136,6 @@ model CircleMember {
   // Tracking
   joinedAt DateTime @default(now())
   leftAt   DateTime?
-  
   @@unique([circleId, userId])
   @@index([circleId])
   @@index([userId])
@@ -189,7 +193,6 @@ model PaymentSchedule {
   
   status    PaymentStatus @default(PENDING)
   paidAt    DateTime?
-  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -283,12 +286,10 @@ model Withdrawal {
   requestedAmount Float // Amount requested before penalty
   penaltyPercentage Float @default(10)
   reason    String?
-  
   status    WithdrawalStatus @default(PENDING)
   
   // Blockchain
   txHash    String?
-  
   createdAt DateTime @default(now())
   approvedAt DateTime?
   completedAt DateTime?
@@ -379,24 +380,30 @@ enum NotificationType {
   GENERAL
 }
 
+// ==========================================
+// NEW AJO GROUP MODELS (Issue #102)
+// ==========================================
+
 model AjoGroup {
-  id              String    @id @default(uuid())
-  contractAddress String    @unique
+  id              String   @id @default(uuid())
+  contractAddress String   @unique
   name            String
-  contributionAmt String    
-  cycleDuration   Int       
-  maxMembers      Int       
-  status          String    @default("OPEN")
+  description     String?
+  creatorAddress  String
+  status          String   @default("OPEN")
+  maxMembers      Int
+  createdAt       DateTime @default(now())
   members         UserAjo[]
 }
 
 model UserAjo {
   userAddress String
   ajoId       String
-  user        User      @relation(fields: [userAddress], references: [address], onDelete: Cascade)
-  ajo         AjoGroup  @relation(fields: [ajoId], references: [id], onDelete: Cascade)
+  ajo         AjoGroup @relation(fields: [ajoId], references: [id], onDelete: Cascade)
 
-  @@id([userAddress, ajoId])
-  @@index([userAddress])
-  @@index([ajoId])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group       AjoGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId]) // Prevents duplicate memberships
+  @@map("ajo_members")
 }
